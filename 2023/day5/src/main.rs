@@ -2,7 +2,8 @@ use std::{
     char,
     collections::VecDeque,
     fs::File,
-    io::{BufRead, BufReader}, u64::MAX,
+    io::{BufRead, BufReader},
+    u64::MAX,
 };
 
 struct MapElement {
@@ -19,7 +20,7 @@ impl GardenMapper {
     fn build(mut input: Vec<MapElement>) -> Self {
         // calculate range gaps in destination
         let mut dst_gaps = VecDeque::<(u64, u64)>::with_capacity(input.len());
-        input.sort_by(|a, b| a.dst.partial_cmp(&b.dst).unwrap());
+        input.sort_by_key(|k| k.dst);
         let mut gap_start = 0;
         for element in &input {
             if element.dst < gap_start {
@@ -35,7 +36,7 @@ impl GardenMapper {
 
         // calcuate range gaps in source
         let mut src_gaps = VecDeque::<(u64, u64)>::with_capacity(input.len());
-        input.sort_by(|a, b| a.src.partial_cmp(&b.src).unwrap());
+        input.sort_by_key(|k| k.src);
         let mut gap_start = 0;
         for element in &input {
             if element.src < gap_start {
@@ -103,34 +104,71 @@ impl GardenMapper {
             mappings.push(e);
         }
 
-        println!("SRC End {}; DST End {}", src_end, dst_end);
         mappings.extend(input);
-        mappings.sort_by(|a, b| a.src.partial_cmp(&b.src).unwrap());
+        mappings.sort_by_key(|k| k.src);
         Self { mappings }
-
     }
 
     fn map_source(&self, src: u64) -> u64 {
-        let r = self.mappings.iter().find(|r| src >= r.src && src < r.src + r.length);
+        let r = self
+            .mappings
+            .iter()
+            .find(|r| src >= r.src && src < r.src + r.length);
         if let Some(r) = r {
-            r.dst + (src-r.src)
+            r.dst + (src - r.src)
         } else {
             src
         }
+    }
+
+    fn map_ranges(&self, ranges: &Vec<(u64, u64)>) -> Vec<(u64, u64)> {
+        let mut ranges = ranges.clone();
+        ranges.sort_by_key(|k| k.0);
+        let mut src_ranges = VecDeque::from(ranges);
+        let mut idx = 0;
+        let mut dst_ranges = Vec::new();
+        let mut src = src_ranges.pop_front();
+        while src.is_some() && idx < self.mappings.len() {
+            let mapping = &self.mappings[idx];
+            let (src_start, src_len) = src.take().unwrap();
+            if mapping.src + mapping.length <= src_start {
+                src = Some((src_start, src_len));
+                idx += 1;
+                continue;
+            }
+            assert!(src_start >= mapping.src && src_start < mapping.src + mapping.length);
+            let len = u64::min(mapping.src + mapping.length, src_start + src_len) - src_start;
+            
+            let dst_range = (src_start- mapping.src + mapping.dst, len);
+            dst_ranges.push(dst_range);
+            if len < src_len {
+                src = Some((src_start + len, src_len - len));
+                idx += 1;
+            } else {
+                src = src_ranges.pop_front();
+            }
+        }
+        while src.is_some() {
+            // out of definition
+            dst_ranges.push(src.clone().unwrap());
+            src = src_ranges.pop_front();
+        }
+        dst_ranges
     }
 }
 
 fn main() {
     let f = File::open("./input").expect("Failed to open input file.");
     let mut reader = BufReader::new(f);
-    let seeds = read_seeds(&mut reader);
-
+    let (seeds, seeds_ranges) = read_seeds(&mut reader);
+    
     let (header, mapper) = read_map(&mut reader);
     if header != "seed-to-soil" {
         panic!("Invalid header")
     }
     let mapper = GardenMapper::build(mapper);
     let soils: Vec<u64> = seeds.into_iter().map(|e| mapper.map_source(e)).collect();
+    let soils_ranges = mapper.map_ranges(&seeds_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "soil-to-fertilizer" {
@@ -138,6 +176,7 @@ fn main() {
     }
     let mapper = GardenMapper::build(mapper);
     let fertilizers: Vec<u64> = soils.into_iter().map(|e| mapper.map_source(e)).collect();
+    let fertilizers_ranges = mapper.map_ranges(&soils_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "fertilizer-to-water" {
@@ -148,6 +187,7 @@ fn main() {
         .into_iter()
         .map(|e| mapper.map_source(e))
         .collect();
+    let waters_ranges = mapper.map_ranges(&fertilizers_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "water-to-light" {
@@ -155,6 +195,7 @@ fn main() {
     }
     let mapper = GardenMapper::build(mapper);
     let lights: Vec<u64> = waters.into_iter().map(|e| mapper.map_source(e)).collect();
+    let lights_ranges = mapper.map_ranges(&waters_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "light-to-temperature" {
@@ -162,6 +203,7 @@ fn main() {
     }
     let mapper = GardenMapper::build(mapper);
     let temperatures: Vec<u64> = lights.into_iter().map(|e| mapper.map_source(e)).collect();
+    let temperatures_ranges = mapper.map_ranges(&lights_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "temperature-to-humidity" {
@@ -172,6 +214,7 @@ fn main() {
         .into_iter()
         .map(|e| mapper.map_source(e))
         .collect();
+    let humidities_ranges = mapper.map_ranges(&temperatures_ranges);
 
     let (header, mapper) = read_map(&mut reader);
     if header != "humidity-to-location" {
@@ -182,16 +225,16 @@ fn main() {
         .into_iter()
         .map(|e| mapper.map_source(e))
         .collect();
+    let locations_ranges = mapper.map_ranges(&humidities_ranges);
 
-    let result = locations.iter().fold(u64::MAX, |cur, e| {
-        if *e < cur {
-            *e
-        } else {
-            cur
-        }
-    });
+    let result_part1 = locations
+        .iter()
+        .fold(u64::MAX, |cur, e| if *e < cur { *e } else { cur });
 
-    println!("{}", result)
+    let result_part2 = locations_ranges.iter().fold(u64::MAX, |cur, e| if e.0 < cur { e.0 } else { cur });
+
+    println!("{}", result_part1);
+    println!("{}", result_part2);
 }
 
 fn get_numbers(text: &str) -> Vec<u64> {
@@ -202,7 +245,7 @@ fn get_numbers(text: &str) -> Vec<u64> {
         .collect()
 }
 
-fn read_seeds(reader: &mut BufReader<File>) -> Vec<u64> {
+fn read_seeds(reader: &mut BufReader<File>) -> (Vec<u64>, Vec<(u64, u64)>) {
     let prefix = "seeds: ";
     let mut line = String::new();
     reader.read_line(&mut line).expect("Failed to read seeds");
@@ -215,7 +258,14 @@ fn read_seeds(reader: &mut BufReader<File>) -> Vec<u64> {
         panic!("Invalid seeds line")
     }
     let text = &text[prefix.len()..];
-    get_numbers(text)
+    let seeds = get_numbers(text);
+    let mut seeds_by_range = Vec::<(u64, u64)>::with_capacity(seeds.len()/2);
+    for idx in 0..seeds.len()/2 {
+        let s_start = seeds[idx*2].clone();
+        let s_len = seeds[idx*2+1].clone();
+        seeds_by_range.push((s_start, s_len));
+    }
+    (seeds, seeds_by_range)
 }
 
 fn read_map(reader: &mut BufReader<File>) -> (String, Vec<MapElement>) {
