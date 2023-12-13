@@ -58,14 +58,11 @@ impl TryFrom<char> for PipeGrid {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct YX(usize, usize);
 
-impl YX {
-    
-}
-
 struct Game {
     lines: Vec<Vec<PipeGrid>>,
     start: Option<YX>,
     size: Option<YX>,
+    profile: Option<Vec<Vec<PipeGrid>>>,
 }
 
 impl Game {
@@ -74,6 +71,7 @@ impl Game {
             lines: Vec::new(),
             start: None,
             size: None,
+            profile: None,
         }
     }
 
@@ -107,53 +105,149 @@ impl Game {
         let start = self.start.unwrap();
         let mut max_distance = 0;
         if let Some(north) = self.to_north(start) {
-            if let Some(steps) = self.try_find_loop(start, north) {
-                if max_distance < steps / 2 {
-                    max_distance = steps / 2;
+            if let Some(lp) = self.try_find_loop(start, north) {
+                if max_distance < lp.len() / 2 {
+                    max_distance = lp.len() / 2;
+                    self.draw_profile(&lp);
                 }
             }
         }
         if let Some(south) = self.to_south(start) {
-            if let Some(steps) = self.try_find_loop(start, south) {
-                if max_distance < steps / 2 {
-                    max_distance = steps / 2;
+            if let Some(lp) = self.try_find_loop(start, south) {
+                if max_distance < lp.len() / 2 {
+                    max_distance = lp.len() / 2;
+                    self.draw_profile(&lp);
                 }
             }
         }
         if let Some(west) = self.to_west(start) {
-            if let Some(steps) = self.try_find_loop(start, west) {
-                if max_distance < steps / 2 {
-                    max_distance = steps / 2;
+            if let Some(lp) = self.try_find_loop(start, west) {
+                if max_distance < lp.len() / 2 {
+                    max_distance = lp.len() / 2;
+                    self.draw_profile(&lp);
                 }
             }
         }
         if let Some(east) = self.to_east(start) {
-            if let Some(steps) = self.try_find_loop(start, east) {
-                if max_distance < steps / 2 {
-                    max_distance = steps / 2;
+            if let Some(lp) = self.try_find_loop(start, east) {
+                if max_distance < lp.len() / 2 {
+                    max_distance = lp.len() / 2;
+                    self.draw_profile(&lp);
                 }
             }
         }
         max_distance
     }
 
-    fn try_find_loop(&self, start: YX, cur: YX) -> Option<usize> {
-        let mut steps = 1;
+    fn draw_profile(&mut self, lp: &Vec<YX>) {
+        let mut profile = Vec::with_capacity(self.size.unwrap().0);
+        for _ in 0..self.size.unwrap().0 {
+            let mut line = Vec::with_capacity(self.size.unwrap().1);
+            for _ in 0..self.size.unwrap().1 {
+                line.push(PipeGrid::Ground);
+            }
+            profile.push(line);
+        }
+
+        for grid in lp.iter() {
+            profile[grid.0][grid.1] = self.lines[grid.0][grid.1].clone();
+        }
+        let start = self.start.unwrap();
+        let mut linked = [false, false, false, false];  // north, south, west, east
+        if let Some(neb) = self.to_north(start) {
+            match profile[neb.0][neb.1] {
+                PipeGrid::SouthEast | PipeGrid::NorthSouth | PipeGrid::SouthWest => {
+                    linked[0] = true;
+                },
+                _ => {}
+            }
+        }
+        if let Some(neb) = self.to_south(start) {
+            match profile[neb.0][neb.1] {
+                PipeGrid::NorthEast | PipeGrid::NorthSouth | PipeGrid::NorthWest => {
+                    linked[1] = true;
+                },
+                _ => {}
+            }
+        }
+        if let Some(neb) = self.to_west(start) {
+            match profile[neb.0][neb.1] {
+                PipeGrid::SouthEast | PipeGrid::NorthEast | PipeGrid::EastWest => {
+                    linked[2] = true;
+                },
+                _ => {}
+            }
+        }
+        if let Some(neb) = self.to_east(start) {
+            match profile[neb.0][neb.1] {
+                PipeGrid::SouthWest | PipeGrid::NorthWest | PipeGrid::EastWest => {
+                    linked[3] = true;
+                },
+                _ => {}
+            }
+        }
+        profile[start.0][start.1] = match linked {
+            [true, true, false, false] => PipeGrid::NorthSouth,
+            [true, false, true, false] => PipeGrid::NorthWest,
+            [true, false, false, true] => PipeGrid::NorthEast,
+            [false, true, true, false] => PipeGrid::SouthWest,
+            [false, true, false, true] => PipeGrid::SouthEast,
+            [false, false, true, true] => PipeGrid::EastWest,
+            _ => panic!("Invalid start grid.")
+        };
+        self.profile.replace(profile);
+    }
+
+    fn try_find_loop(&self, start: YX, cur: YX) -> Option<Vec<YX>> {
+        let mut lp = vec![start];
         let mut cur = cur;
         let mut pre = start;
         while let Some(next) = self.get_next_grid(pre, cur) {
+            lp.push(cur);
             pre = cur;
             cur = next;
-            steps += 1;
             if cur == start {
                 break;
             }
         }
         if cur == start {
-            Some(steps)
+            Some(lp)
         } else {
             None
         }
+    }
+
+    fn play_part2(&self) -> usize {
+        let mut count = 0;
+        for line in self.profile.as_ref().unwrap().iter() {
+            let mut in_loop = false;
+            let mut pre = PipeGrid::Ground;
+            for grid in line.iter() {
+                match grid {
+                    PipeGrid::EastWest => continue,
+                    PipeGrid::NorthSouth | PipeGrid::NorthEast | PipeGrid::SouthEast => {
+                        in_loop = !in_loop;
+                    }
+                    PipeGrid::NorthWest => {
+                        if pre == PipeGrid::NorthEast {
+                            in_loop = !in_loop;
+                        }
+                    }
+                    PipeGrid::SouthWest => {
+                        if pre == PipeGrid::SouthEast {
+                            in_loop = !in_loop;
+                        }
+                    }
+                    _ => {
+                        if in_loop {
+                            count += 1;
+                        }
+                    }
+                }
+                pre = *grid;
+            }
+        }
+        count
     }
 
     fn get_next_grid(&self, pre: YX, cur: YX) -> Option<YX> {
@@ -260,7 +354,6 @@ impl Game {
             None
         }
     }
-
 }
 
 fn main() {
@@ -277,4 +370,6 @@ fn main() {
     }
     let part1 = game.play_part1();
     println!("Part1 {}", part1);
+    let part2 = game.play_part2();
+    println!("Part2 {}", part2);
 }
