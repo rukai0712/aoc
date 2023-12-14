@@ -118,6 +118,17 @@ impl Record {
             }
         }
     }
+
+    fn unfold(&self) -> Self {
+        let mut sprints = self.sprints.clone();
+        let nums = self.nums.clone().repeat(5);
+        for _ in 0..4 {
+            sprints.push(None);
+            sprints.extend(self.sprints.iter());
+        }
+        Self { sprints, nums }
+    }
+
 }
 
 fn main() {
@@ -140,5 +151,13 @@ fn main() {
     }
 
     println!("Part1 {}", part1);
+
+    let records: Vec<Record> = records.iter().map(|r| r.unfold()).collect();
+    let mut part2 = 0;
+    for record in records.iter() {
+        part2 += record.possibility();
+    }
+
+    println!("Part2 {}", part2);
 
 }
