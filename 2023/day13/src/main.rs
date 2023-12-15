@@ -30,18 +30,35 @@ impl Graph {
         self.rows.push(new_row);
     }
 
-    fn find_mirror(&self) -> (Option<usize>, Option<usize>) {
+    fn find_mirror(&self, with_fix: bool) -> (Option<usize>, Option<usize>) {
         let mut result = (None, None);
         for mirror in 1..self.rows.len() {
             let compare_len = mirror.min(self.rows.len() - mirror);
-            let mut is_mirror = true;
+            let mut diff = Vec::new();
             for i in 0..compare_len {
-                if self.rows[mirror - i - 1] != self.rows[mirror + i] {
-                    is_mirror = false;
-                    break;
+                let v1 = self.rows[mirror - i - 1];
+                let v2 = self.rows[mirror + i];
+                if v1 != v2  {
+                    diff.push((v1, v2));
                 }
             }
-            if is_mirror {
+            if with_fix {
+                if diff.len() == 1 {
+                    let (mut v1, mut v2) = diff[0];
+                    let mut diff_bits = 0;
+                    while diff_bits < 2 && (v1 > 0 || v2 > 0) {
+                        if v1 % 2 != v2 % 2 {
+                            diff_bits += 1;
+                        }
+                        v1 /= 2;
+                        v2 /= 2;
+                    }
+                    if diff_bits == 1 {
+                        result.0.replace(mirror);
+                        break;
+                    }
+                }
+            } else if diff.len() == 0 {
                 result.0.replace(mirror);
                 break;
             }
@@ -49,23 +66,38 @@ impl Graph {
 
         for mirror in 1..self.cols.len() {
             let compare_len = mirror.min(self.cols.len() - mirror);
-            let mut is_mirror = true;
+            let mut diff = Vec::new();
             for i in 0..compare_len {
-                if self.cols[mirror - i - 1] != self.cols[mirror + i] {
-                    is_mirror = false;
-                    break;
+                let v1 = self.cols[mirror - i - 1];
+                let v2 = self.cols[mirror + i];
+                if v1 != v2  {
+                    diff.push((v1, v2));
                 }
             }
-            if is_mirror {
+            if with_fix {
+                if diff.len() == 1 {
+                    let (mut v1, mut v2) =diff[0];
+                    let mut diff_bits = 0;
+                    while diff_bits < 2 && (v1 > 0 || v2 > 0) {
+                        if v1 % 2 != v2 % 2 {
+                            diff_bits += 1;
+                        }
+                        v1 /= 2;
+                        v2 /= 2;
+                    }
+                    if diff_bits == 1 {
+                        result.1.replace(mirror);
+                        break;
+                    }
+                }
+            } else if diff.len() == 0 {
                 result.1.replace(mirror);
                 break;
             }
         }
-
-        
         return result;
     }
-    
+
 }
 
 
@@ -93,8 +125,9 @@ fn main() {
     assert!(graph.rows.len() == 0 && graph.cols.len() == 0);
 
     let mut part1 = 0;
+    let mut part2 = 0;
     for graph in graphs.iter() {
-        let (row_idx, col_idx) = graph.find_mirror();
+        let (row_idx, col_idx) = graph.find_mirror(false);
         if let Some(row_idx) = row_idx {
             assert!(col_idx.is_none());
             part1 += row_idx * 100;
@@ -103,7 +136,17 @@ fn main() {
         } else {
             println!("Not find mirror");
         }
+        let (row_idx, col_idx) = graph.find_mirror(true);
+        if let Some(row_idx) = row_idx {
+            // assert!(col_idx.is_none());
+            part2 += row_idx * 100;
+        } else if let Some(col_idx) = col_idx {
+            part2 += col_idx;
+        } else {
+            println!("Not find mirror");
+        }
     }
 
     println!("Part1: {}", part1);
+    println!("Part2: {}", part2);
 }
