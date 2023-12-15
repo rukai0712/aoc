@@ -55,11 +55,42 @@ impl Game {
         }
         load
     }
+
+    fn rotate_90(&self) -> Self {
+        let mut rotated = Self {
+            cols: Vec::with_capacity(self.size.0),
+            size: (self.size.1, self.size.0),
+        };
+        for _ in 0..rotated.size.1 {
+            rotated.cols.push(Vec::new());
+        }
+        for i in 0..self.cols.len() {
+            let mut new_i = self.size.0;
+            for r in self.cols[i].iter() {
+                match *r {
+                    Rock::Cube(row_idx) => {
+                        new_i = self.size.0 - row_idx - 1;
+                        rotated.cols[new_i].push(Rock::Cube(i));
+                    },
+                    Rock::Round(_) => {
+                        new_i -= 1;
+                        rotated.cols[new_i].push(Rock::Round(i));
+                    }
+                }
+            }
+        }
+        rotated
+    } 
+
+    fn rotate_360(&self) -> Self {
+        self.rotate_90().rotate_90().rotate_90().rotate_90()
+    }
+
 }
 
 
 fn main() {
-    let f = File::open("./input").expect("Failed to open input file.");
+    let f = File::open("./example_input").expect("Failed to open input file.");
     let mut reader = BufReader::new(f);
     let mut line = String::new();
     let mut game = Game::new();
@@ -72,5 +103,7 @@ fn main() {
     }
     let part1 = game.calculate_load();
     println!("Part1: {}", part1);
+    game = game.rotate_360();
+    println!("{}", game.calculate_load());
 
 }
