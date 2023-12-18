@@ -53,11 +53,11 @@ impl Game {
         self.size.0 += 1;
     }
 
-    fn part1(&self) -> usize {
+    fn calculation(&self, init_status: (usize, usize, LightDirection)) -> usize {
         let mut reached: HashSet<(usize, usize)> = HashSet::new();
         let mut reached_status: HashSet<(usize, usize, LightDirection)> = HashSet::new();
         let mut bfs = VecDeque::new();
-        bfs.push_back((0_usize, 0_usize, LightDirection::Right));
+        bfs.push_back(init_status);
         while let Some(state) = bfs.pop_front() {
             if reached_status.contains(&state) {
                 continue;
@@ -149,6 +149,20 @@ fn main() {
     for line in input.trim().split_whitespace() {
         game.add_input(line);
     }
-    println!("Part1: {}", game.part1());
+    println!("Part1: {}", game.calculation((0, 0, LightDirection::Right)));
+    let mut maxium = 0;
+    for row in 0..game.size.0 {
+        let sum = game.calculation((row, 0, LightDirection::Right));
+        maxium = maxium.max(sum);
+        let sum = game.calculation((row, game.size.0-1, LightDirection::Left));
+        maxium = maxium.max(sum);
 
+    }
+    for col in 0..game.size.1 {
+        let sum = game.calculation((0, col, LightDirection::Bottom));
+        maxium = maxium.max(sum);
+        let sum = game.calculation((game.size.0-1, col, LightDirection::Top));
+        maxium = maxium.max(sum);
+    }
+    println!("Part2: {}", maxium);
 }
