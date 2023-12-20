@@ -178,7 +178,8 @@ fn main() {
     let _ = f
         .read_to_string(&mut text)
         .expect("Failed to read input file.");
-    let mut digs = Vec::new();
+    let mut digs_part1 = Vec::new();
+    let mut digs_part2 = Vec::new();
     for line in text.trim().split("\n") {
         let mut line_reader = line.split_ascii_whitespace();
         let direction = line_reader.next().unwrap();
@@ -190,9 +191,22 @@ fn main() {
             "R" => (Direction::Right, len),
             _ => unreachable!(),
         };
-        digs.push(dig);
+        digs_part1.push(dig);
+        let hex = line_reader.next().unwrap();
+        let len = usize::from_str_radix(&hex[2..7], 16).unwrap();
+        let dig = match &hex[7..8] {
+            "0" => (Direction::Right, len),
+            "1" => (Direction::Down, len),
+            "2" => (Direction::Left, len),
+            "3" => (Direction::Up, len), 
+            _ => unreachable!(),
+        };
+        digs_part2.push(dig);
     }
-    let mut map = Map::new(digs);
-    let part1 = map.calculate_area();
+    let mut map1 = Map::new(digs_part1);
+    let part1 = map1.calculate_area();
     println!("Part1 {}", part1);
+    let mut map2 = Map::new(digs_part2);
+    let part2 = map2.calculate_area();
+    println!("Part2 {}", part2);
 }
