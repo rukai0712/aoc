@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs::File,
     io::{BufRead, BufReader},
 };
@@ -46,9 +46,18 @@ enum Behavior {
     Jump(usize),
 }
 
+#[derive(Debug, Clone)]
 struct Part {
     props: Vec<Prop>,
     score: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PartRange {
+    x: (usize, usize),
+    m: (usize, usize),
+    a: (usize, usize),
+    s: (usize, usize),
 }
 
 struct Workflow {
@@ -198,6 +207,183 @@ impl Workflow {
         }
         self.behaviors.last().unwrap().clone()
     }
+
+    fn handle_range(&self, part_range: PartRange) -> Vec<(PartRange, Behavior)> {
+        let mut sub_parts = Vec::new();
+        let mut remain = Some(part_range);
+        for (condition, &behavior) in self.conditions.iter().zip(self.behaviors.iter()) {
+            if let Some(mut part_range) = remain.take() {
+                match condition {
+                    Condition::Less(Prop::X(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.x.0 >= threshold {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.x.1 <= threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.x.1 = threshold;
+                                part_range.x.0 = threshold;
+                                if new_range.x.0 < new_range.x.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.x.0 < part_range.x.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Less(Prop::M(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.m.0 >= threshold {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.m.1 <= threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.m.1 = threshold;
+                                part_range.m.0 = threshold;
+                                if new_range.m.0 < new_range.m.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.m.0 < part_range.m.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Less(Prop::A(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.a.0 >= threshold {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.a.1 <= threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.a.1 = threshold;
+                                part_range.a.0 = threshold;
+                                if new_range.a.0 < new_range.a.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.a.0 < part_range.a.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Less(Prop::S(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.s.0 >= threshold {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.s.1 <= threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.s.1 = threshold;
+                                part_range.s.0 = threshold;
+                                if new_range.s.0 < new_range.s.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.s.0 < part_range.s.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Large(Prop::X(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.x.1 <= threshold + 1 {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.x.0 > threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.x.0 = threshold + 1;
+                                part_range.x.1 = threshold + 1;
+                                if new_range.x.0 < new_range.x.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.x.0 < part_range.x.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Large(Prop::M(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.m.1 <= threshold + 1 {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.m.0 > threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.m.0 = threshold + 1;
+                                part_range.m.1 = threshold + 1;
+                                if new_range.m.0 < new_range.m.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.m.0 < part_range.m.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Large(Prop::A(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.a.1 <= threshold + 1 {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.a.0 > threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.a.0 = threshold + 1;
+                                part_range.a.1 = threshold + 1;
+                                if new_range.a.0 < new_range.a.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.a.0 < part_range.a.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                    Condition::Large(Prop::S(threshold)) => {
+                        let threshold = *threshold;
+                        if part_range.s.1 <= threshold + 1 {
+                            remain.replace(part_range);
+                        } else {
+                            if part_range.s.0 > threshold {
+                                sub_parts.push((part_range, behavior));
+                            } else {
+                                let mut new_range = part_range.clone();
+                                new_range.s.0 = threshold + 1;
+                                part_range.s.1 = threshold + 1;
+                                if new_range.s.0 < new_range.s.1 {
+                                    sub_parts.push((new_range, behavior));
+                                }
+                                if part_range.s.0 < part_range.s.1 {
+                                    remain.replace(part_range);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        if let Some(part_range) = remain.take() {
+            sub_parts.push((part_range, self.behaviors.last().unwrap().clone()));
+        }
+        sub_parts
+    }
 }
 
 impl Machine {
@@ -208,10 +394,10 @@ impl Machine {
             match w.handle_part(part) {
                 Behavior::Accept => {
                     return true;
-                },
+                }
                 Behavior::Reject => {
                     return false;
-                },
+                }
                 Behavior::Jump(idx) => {
                     w_idx.replace(idx);
                 }
@@ -219,6 +405,35 @@ impl Machine {
         }
         false
     }
+
+    fn handle_range(&self, part_range: PartRange) -> Vec<PartRange> {
+        let mut bfs = VecDeque::new();
+        bfs.push_back((part_range, 0));
+        let mut accept_ranges = Vec::new();
+        while let Some((range, w_idx)) = bfs.pop_front() {
+            let workflow = &self.workflows[w_idx];
+            for (sub_range, behavior) in workflow.handle_range(range).into_iter() {
+                match behavior {
+                    Behavior::Accept => {
+                        accept_ranges.push(sub_range);
+                    },
+                    Behavior::Reject => {}
+                    Behavior::Jump(idx) => {
+                        bfs.push_back((sub_range, idx));
+                    }
+                }
+            }
+        }
+        accept_ranges
+    }
+}
+
+impl PartRange {
+
+    fn count(&self) -> usize {
+        (self.x.1-self.x.0)  * (self.m.1-self.m.0) * (self.a.1-self.a.0) * (self.s.1-self.s.0) 
+    }
+    
 }
 
 fn main() {
@@ -255,4 +470,13 @@ fn main() {
     }
     println!("Part1 {}", part1);
 
+    let part_range = PartRange {
+        x: (1, 4001),
+        m: (1, 4001),
+        a: (1, 4001),
+        s: (1, 4001),
+    };
+    let accept_ranges = machine.handle_range(part_range);
+    let part2 = accept_ranges.iter().fold(0, |crr, r| crr + r.count());
+    println!("Part2 {}", part2);
 }
