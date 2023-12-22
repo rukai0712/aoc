@@ -10,7 +10,7 @@ enum Pulse {
     High,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Node {
     Broadcaster,
     FlipFlop(FlipFlop),
@@ -18,23 +18,25 @@ enum Node {
     Test,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct NodeConnection {
     from: Vec<usize>,
     to: Vec<usize>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct FlipFlop {
     on: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Conjunction {
     on: Vec<bool>,
 }
 
+#[derive(Debug, Clone)]
 struct Machine {
+    ids: HashMap<String, usize>,
     connections: Vec<NodeConnection>,
     nodes: Vec<Node>,
 }
@@ -59,6 +61,10 @@ impl FlipFlop {
             }
         }
     }
+
+    fn clear(&mut self) {
+        self.on = false;
+    }
 }
 
 impl Conjunction {
@@ -81,6 +87,10 @@ impl Conjunction {
         } else {
             Some(Pulse::High)
         }
+    }
+
+    fn clear(&mut self) {
+        self.on = [false].repeat(self.on.len());
     }
 }
 
@@ -179,24 +189,38 @@ impl MachineBuilder {
         nodes.sort_by(|a, b| a.1.cmp(&b.1));
         connections.sort_by(|a, b| a.1.cmp(&b.1));
         Machine {
+            ids: self.ids,
             nodes: nodes.into_iter().map(|(node, _)| node).collect(),
             connections: connections
                 .into_iter()
                 .map(|(connection, _)| connection)
-                .collect(),
+                .collect()
         }
     }
 }
 
 impl Machine {
-    fn press(&mut self) -> (usize, usize) {
+    fn press(&mut self, start: &str, stop: Option<&str>, stop_status: Option<&Node>) -> (usize, usize, bool) {
         let mut low_count: usize = 1;
         let mut high_count = 0;
+        let mut find_stop_state = false;
         let mut bfs = VecDeque::new();
-        for &to_id in self.connections.get(0).unwrap().to.iter() {
-            bfs.push_back((0, Pulse::Low, to_id));
+        let start = self.ids.get(start).unwrap().clone();
+        let stop = stop.map(|s| self.ids.get(s).unwrap().clone());
+        let pulse = match self.nodes.get_mut(start).unwrap() {
+            Node::Broadcaster => {
+                Some(Pulse::Low)
+            },
+            Node::FlipFlop(state) => {
+                state.handle_pulse(Pulse::Low)
+            },
+            _ => unreachable!()
+        };
+        if let Some(pulse) = pulse {
+            for &to_id in self.connections.get(start).unwrap().to.iter() {
+                bfs.push_back((start, pulse, to_id));
+            }
         }
-
         while let Some((from_id, pulse, to_id)) = bfs.pop_front() {
             match pulse {
                 Pulse::High => high_count += 1,
@@ -217,13 +241,57 @@ impl Machine {
                 Node::FlipFlop(state) => state.handle_pulse(pulse),
                 Node::Test => None,
             };
+            if let Some(stop) = stop {
+                if stop == to_id {
+                    // cut pulse when reached to stop
+                    if *node == *stop_status.unwrap() {
+                        find_stop_state = true;
+                    }
+                    continue;
+                }
+            }
             if let Some(pulse) = pulse {
                 for &next_id in self.connections.get(to_id).unwrap().to.iter() {
                     bfs.push_back((to_id, pulse, next_id))
                 }
             }
         }
-        (low_count, high_count)
+        (low_count, high_count, find_stop_state)
+    }
+
+    fn reset(&mut self) {
+        for node in self.nodes.iter_mut() {
+            match node {
+                Node::Conjunction(state) => state.clear(),
+                Node::FlipFlop(state) => state.clear(),
+                _ => {}
+            }
+        }
+    }
+
+}
+
+impl Machine {
+    fn calcuate_repeats(&mut self, start: &str, stop: &str, stop_status: Node) -> Option<(usize, usize)> {
+        self.reset();
+        let mut snapshots: Vec<(Vec<Node>, usize)> = Vec::new();
+        let mut press = 0;
+        while press < 100000 {
+            let (_, _, find) = self.press(start, Some(stop), Some(&stop_status));
+            press += 1;
+            if find {
+                let snapshot = self.nodes.clone();
+                for (pre_snapshot, pre_press) in snapshots.iter() {
+                    if *pre_snapshot == snapshot {
+                        let pre_press = pre_press.clone();
+                        let repeat = press - pre_press;
+                        return Some((pre_press, repeat));
+                    }
+                }
+                snapshots.push((snapshot, press));
+            }
+        }
+        None
     }
 }
 
@@ -242,9 +310,60 @@ fn main() {
     let mut machine = builder.build();
     let mut part1_counts = (0, 0);
     for _ in 0..1000 {
-        let counts = machine.press();
+        let counts = machine.press("broadcaster", None, None);
         part1_counts.0 += counts.0;
         part1_counts.1 += counts.1;
     }
     println!("Part1 {}", part1_counts.0 * part1_counts.1);
+
+    // Part2, input special algorithm
+    let mut state = Conjunction::default();
+    state.init(1);
+    let repeat1 = machine.calcuate_repeats("nm", "pk", Node::Conjunction(state.clone())).unwrap();
+    let repeat2 = machine.calcuate_repeats("sh", "hf", Node::Conjunction(state.clone())).unwrap();
+    let repeat3 = machine.calcuate_repeats("ps", "pm", Node::Conjunction(state.clone())).unwrap();
+    let repeat4 = machine.calcuate_repeats("fs", "mk", Node::Conjunction(state.clone())).unwrap();
+    
+    println!("{:?}", repeat1);    // (4021, 4021)
+    println!("{:?}", repeat2);    // (4013, 4013)
+    println!("{:?}", repeat3);    // (3881, 3881)
+    println!("{:?}", repeat4);    // (3889, 3889)
+
+    let part2 = lcm(vec![repeat1.1, repeat2.1, repeat3.1, repeat4.1]);
+    println!("Part2 {}", part2);
+
+}
+
+
+fn lcm(numbers: Vec<usize>) -> usize {
+    let mut lcm = 1;
+    let mut remains = numbers;
+
+    for i in 2.. {
+        if remains.len() == 0 {
+            break;
+        }
+        let mut find = true;
+        while find {
+            find = false;
+            let cur = remains;
+            remains = Vec::new();
+            for &c in cur.iter() {
+                if c % i == 0 {
+                    find = true;
+                    let c = c / i;
+                    if c > 1 {
+                        remains.push(c);
+                    }
+                } else {
+                    remains.push(c);
+                }
+            }
+            if find {
+                lcm *= i;
+            }
+        }
+    }
+
+    lcm
 }
