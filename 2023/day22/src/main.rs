@@ -1,4 +1,4 @@
-use std::{fs::File, io::{BufReader, BufRead}, collections::{HashMap, HashSet}};
+use std::{fs::File, io::{BufReader, BufRead}, collections::{HashMap, HashSet, VecDeque}};
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -125,8 +125,6 @@ impl Snapshot {
             supports,
             relies
         }
-
-
     }
 
 }
@@ -149,6 +147,25 @@ impl Connetions {
         }
         disintegrate_bricks
     }
+
+    fn calculate_fall_bricks(&self, dis_brick: &usize) -> usize {
+        let mut removed_bricks = HashSet::new();
+        removed_bricks.insert(*dis_brick);
+        let mut bfs = VecDeque::new();
+        bfs.push_back(*dis_brick);
+        while let Some(s_idx) = bfs.pop_front() {
+            for &rely_idx in self.supports.get(&s_idx).unwrap().iter() {
+                if removed_bricks.contains(&rely_idx) {
+                    continue;
+                }
+                if removed_bricks.is_superset(self.relies.get(&rely_idx).unwrap()) {
+                    removed_bricks.insert(rely_idx);
+                    bfs.push_back(rely_idx);
+                }
+            }
+        }
+        removed_bricks.len() - 1
+    }
 }
 
 
@@ -169,4 +186,9 @@ fn main() {
     let connection = snapshot.simulate();
     let disintegrate_bricks = connection.calculate_disintegrate_bricks();
     println!("Part1 {}", disintegrate_bricks.len());
+    let mut part2 = 0;
+    for idx in 0..snapshot.bricks.len() {
+        part2 += connection.calculate_fall_bricks(&idx);
+    }
+    println!("Part2 {}", part2);
 }
