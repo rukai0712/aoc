@@ -1,10 +1,10 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, Mul, Sub},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Coord<E> {
     x: E,
     y: E,
@@ -23,7 +23,9 @@ struct SearchAreaXY {
 }
 
 struct Segment {
-    points: [Coord<i64>; 2],
+    start: Coord<i64>,
+    end: Coord<i64>,
+    sp: Coord<i64>,
 }
 
 impl Path {
@@ -165,7 +167,9 @@ impl SearchAreaXY {
             None
         } else if points.len() == 1 {
             Some(Segment {
-                points: [path.start, points[0]],
+                start: path.start,
+                end: points[0],
+                sp: path.sp,
             })
         } else {
             assert!(points.len() == 2);
@@ -173,15 +177,56 @@ impl SearchAreaXY {
             let v1: Coord<f64> = (points[1] - path.start).into();
             if v1.len() >= v0.len() {
                 Some(Segment {
-                    points: [points[0], points[1]],
+                    start: points[0],
+                    end: points[1],
+                    sp: path.sp,
                 })
             } else {
                 Some(Segment {
-                    points: [points[1], points[0]],
+                    start: points[1],
+                    end: points[0],
+                    sp: path.sp,
                 })
             }
         }
     }
+}
+
+impl Segment {
+    fn intersect_xy(&self, other: &Segment) -> bool {
+        if self.sp.cross_product(&other.sp).z == 0
+            && self.start != other.start
+            && (self.start - other.start).cross_product(&other.sp).z == 0
+        {
+            // in the same line, but start not the same
+            return false;
+        }
+        let v1 = other.start - self.start;
+        let v2 = other.end - self.start;
+        if (self.sp.cross_product(&v1).z > 0) == (self.sp.cross_product(&v2).z > 0) {
+            // on the same side
+            return false;
+        }
+        let v1 = self.start - other.start;
+        let v2 = self.end - other.start;
+        if (other.sp.cross_product(&v1).z > 0) == (other.sp.cross_product(&v2).z > 0) {
+            // on the same side
+            return false;
+        }
+        return true;
+    }
+}
+
+fn calculate_intersections(segments: &Vec<Segment>) -> usize {
+    let mut counts = 0;
+    for i in 0..segments.len() {
+        for j in i+1..segments.len() {
+            if segments[i].intersect_xy(&segments[j]) {
+                counts += 1;
+            }
+        }
+    }
+    counts
 }
 
 fn main() {
@@ -206,4 +251,6 @@ fn main() {
         .filter_map(|v| area.convert_path_to_segment(v))
         .collect();
     println!("{}", segments.len());
+    let part1 = calculate_intersections(&segments);
+    println!("Part1 {}", part1)
 }
