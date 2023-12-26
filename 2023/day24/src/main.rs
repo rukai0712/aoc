@@ -1,10 +1,10 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    ops::{Add, Mul, Sub},
+    ops::{Add, Mul, Sub}, str::FromStr,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 struct Coord<E> {
     x: E,
     y: E,
@@ -12,9 +12,9 @@ struct Coord<E> {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Path {
-    start: Coord<i64>,
-    sp: Coord<i64>,
+struct Path<E> {
+    start: Coord<E>,
+    sp: Coord<E>,
 }
 
 struct SearchAreaXY {
@@ -28,7 +28,7 @@ struct Segment {
     sp: Coord<i64>,
 }
 
-impl Path {
+impl Path<i64> {
     fn from(line: &str) -> Self {
         let mut f = line.trim().split('@');
         let start: Vec<i64> = f
@@ -114,8 +114,14 @@ impl From<Coord<i64>> for Coord<f64> {
     }
 }
 
+impl From<Path<i64>> for Path<f64> {
+    fn from(value: Path<i64>) -> Self {
+        Self { start: value.start.into(), sp: value.sp.into() }
+    }
+}
+
 impl SearchAreaXY {
-    fn convert_path_to_segment(&self, path: &Path) -> Option<Segment> {
+    fn convert_path_to_segment(&self, path: &Path<i64>) -> Option<Segment> {
         let mut cross_points: Vec<Coord<i64>> = Vec::new();
         if path.sp.x != 0 {
             let y: i64 = path.sp.y * (self.x_range.0 - path.start.x) / path.sp.x + path.start.y;
@@ -220,13 +226,69 @@ impl Segment {
 fn calculate_intersections(segments: &Vec<Segment>) -> usize {
     let mut counts = 0;
     for i in 0..segments.len() {
-        for j in i+1..segments.len() {
+        for j in i + 1..segments.len() {
             if segments[i].intersect_xy(&segments[j]) {
                 counts += 1;
             }
         }
     }
     counts
+}
+
+// constantly move start points along the path by the follow steps:
+// 1. minimize the distance from points[0] to the line connected from poins[2]-points[3]
+// 2. minimize the distance from points[1] to the line connected from poins[2]-points[3]
+// 3. minimize the distance from points[2] to the line connected from poins[0]-points[1]
+// 4. minimize the distance from points[3] to the line connected from poins[0]-points[1]
+// and repeat the following steps until the space collapse to a single line.
+fn search_in_paths(paths: [&Path<i64>;4]) -> Vec<(f64, Coord<f64>)> {
+    let mut points: [Path<f64>;4] = [(*paths[0]).into(), (*paths[1]).into(), (*paths[2]).into(), (*paths[3]).into()];
+    let mut converged = 0;
+    while converged < 4 {
+        converged = 0;
+        for i in 0..4 {
+            let mov_p: Coord<f64> = points[i].start;
+            let mov_sp: Coord<f64> = points[i].sp;
+            let s_p: Coord<f64> = points[(2+i)%4].start;    // 0=>2 1=>3 | 2=>0 3=>1
+            let a_p: Coord<f64> = mov_p - s_p;
+            let b_p: Coord<f64> = points[3-i].start;        // 0=>3 1=>2 | 2=>1 3=>0
+            let b_p: Coord<f64> = (b_p - s_p).norm();
+            let t = b_p.dot_product(&a_p);
+            let e_p = Coord::<f64> {
+                x: s_p.x + t * b_p.x,
+                y: s_p.y + t * b_p.y,
+                z: s_p.z + t * b_p.z,
+            };
+            let c_p = e_p - mov_p;
+            let mov_sp = mov_sp.norm();
+            let t2 = mov_sp.dot_product(&c_p);
+            let mov = Coord::<f64> {
+                x: t2 * mov_sp.x,
+                y: t2 * mov_sp.y,
+                z: t2 * mov_sp.z,
+            };
+            println!("Moved: {}", mov.len());
+            if mov.x.abs() < 0.05 && mov.y.abs() < 0.05 && mov.z.abs() < 0.05 {
+                converged += 1;
+            } 
+            points[i].start = Coord::<f64> {
+                x: mov_p.x + mov.x,
+                y: mov_p.y + mov.y,
+                z: mov_p.z + mov.z,
+            };
+        }
+    }
+    let mut cross_points = Vec::new();
+    for i in 0..4 {
+        let tx = (points[i].start.x - paths[i].start.x as f64) / points[i].sp.x ;
+        let ty = (points[i].start.y - paths[i].start.y as f64) / points[i].sp.y;
+        let tz = (points[i].start.z - paths[i].start.z as f64) / points[i].sp.z;
+        let t = tx / 3.0 + ty / 3.0 + tz / 3.0;
+        println!("t={}, tx={}, ty={}, tz={}", t, tx, ty, tz);
+        cross_points.push((t, points[i].start));
+    }
+    println!("{:?}", cross_points);
+    cross_points
 }
 
 fn main() {
@@ -238,7 +300,7 @@ fn main() {
         if size == 0 {
             break;
         }
-        pathes.push(Path::from(&line));
+        pathes.push(Path::<i64>::from(&line));
         line.clear();
     }
     let area = SearchAreaXY {
@@ -252,5 +314,18 @@ fn main() {
         .collect();
     println!("{}", segments.len());
     let part1 = calculate_intersections(&segments);
-    println!("Part1 {}", part1)
+    println!("Part1 {}", part1);
+
+    // select any four unparallel paths
+    let mut cross_points = search_in_paths([&pathes[0], &pathes[1], &pathes[3], &pathes[4]]);
+    // sort by the time
+    cross_points.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let delta = cross_points[1].1 - cross_points[0].1;
+    let delta_time = cross_points[1].0 - cross_points[0].0;
+    let start = Coord::<f64> {
+        x: cross_points[0].1.x - delta.x / delta_time * cross_points[0].0,
+        y: cross_points[0].1.y - delta.y / delta_time * cross_points[0].0,
+        z: cross_points[0].1.z - delta.z / delta_time * cross_points[0].0,
+    };
+    println!("Part2 {:.3}", start.x+start.y+start.z);    
 }
